@@ -111,3 +111,17 @@ python train.py ${DATA_DIR} --task translation \
       --encoder-type TransformerAvgEncoder \
       --L2norm true --image_emb_fix --total_num_img 5 --per_num_img 1 --find-unused-parameters --merge_option att-gate --gate_type neural-gate
 ```
+
+### Reference
+
+Please kindly cite this paper in your publications if it helps your research:
+
+```
+@inproceedings{zhang2020neural,
+title={Neural Machine Translation with Universal Visual Representation},
+author={Zhuosheng Zhang and Kehai Chen and Rui Wang and Masao Utiyama and Eiichiro Sumita and Zuchao Li and Hai Zhao},
+booktitle={International Conference on Learning Representations},
+year={2020},
+url={https://openreview.net/forum?id=Byl8hhNYPS}
+}
+```
