@@ -147,10 +147,10 @@ class TransformerModel(FairseqEncoderDecoderModel):
                             help='the weight of image embedding')
         parser.add_argument('--gate_type', type=str, metavar='STR',
                             help='scalar gate or neural gate')
-        parser.add_argument('--cap2image_file', type=str, metavar='STR',
-                            help='cap2image_file')
-        parser.add_argument('--image_embedding_file', type=str, metavar='STR',
-                            help='image_embedding_file')
+        # parser.add_argument('--cap2image_file', type=str, metavar='STR',
+                            # help='cap2image_file')
+        # parser.add_argument('--image_embedding_file', type=str, metavar='STR',
+                            # help='image_embedding_file')
 
 
         # fmt: on
@@ -311,8 +311,11 @@ class TransformerAvgEncoder(FairseqEncoder):
         self.total_num_img = args.total_num_img
         self.per_num_img = args.per_num_img
 
-        cap2image_file = args.cap2image_file
-        image_embedding_file = args.image_embedding_file
+        # cap2image_file = args.cap2image_file
+        # image_embedding_file = args.image_embedding_file
+        
+        cap2image_file = getattr(args, "cap2image_file", "data/cap2image.pickle")
+        image_embedding_file = getattr(args, "image_embedding_file", "features_resnet50/train-resnet50-avgpool.npy")
 
         self.cap2image = pickle.load(open(cap2image_file, "rb"))  #cap_id to image_id
 
