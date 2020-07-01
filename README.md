@@ -30,7 +30,7 @@ This implementation is based on [fairseq](https://github.com/pytorch/fairseq). W
 
    Segment both the NMT dataset and Multi30K dataset with the same BPE code file (built by the NMT dataset) using the tool [subword-nmt](https://github.com/rsennrich/subword-nmt).
 
-   Run `prepare-wmt-en2de.sh` which is modified version of [prepare-wmt14en2de.sh](https://github.com/pytorch/fairseq/blob/master/examples/translation/prepare-wmt14en2de.sh)
+   Run `prepare-wmt-en2de.sh --icml17` (for WMT'14 En-De), which is a modified version of [prepare-wmt14en2de.sh](https://github.com/pytorch/fairseq/blob/master/examples/translation/prepare-wmt14en2de.sh)
 
 ### Lookup Table
 
