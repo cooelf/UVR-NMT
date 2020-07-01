@@ -210,6 +210,9 @@ class TransformerModel(FairseqEncoderDecoderModel):
         if args.encoder_type == "TransformerAvgEncoder":
             #print("using TransformerAvgEncoder")
             return TransformerAvgEncoder(args, src_dict, embed_tokens)
+        elif args.encoder_type == "TransformerEncoder":
+            #print("using TransformerEncoder")
+            return TransformerEncoder(args, src_dict, embed_tokens)
     @classmethod
     def build_decoder(cls, args, tgt_dict, embed_tokens):
         return TransformerDecoder(args, tgt_dict, embed_tokens)
@@ -463,6 +466,131 @@ class TransformerAvgEncoder(FairseqEncoder):
         #print(output.size())
         x = output.transpose(0, 1)  # batch_size, seq_len, dim -> T x B x C
         #print(x)
+        # print(x.size())
+        # print(encoder_padding_mask.size())
+        return {
+            'encoder_out': x,  # T x B x C
+            'encoder_padding_mask': encoder_padding_mask,  # B x T
+        }
+
+    def reorder_encoder_out(self, encoder_out, new_order):
+        """
+        Reorder encoder output according to *new_order*.
+
+        Args:
+            encoder_out: output from the ``forward()`` method
+            new_order (LongTensor): desired order
+
+        Returns:
+            *encoder_out* rearranged according to *new_order*
+        """
+        if encoder_out['encoder_out'] is not None:
+            encoder_out['encoder_out'] = \
+                encoder_out['encoder_out'].index_select(1, new_order)
+        if encoder_out['encoder_padding_mask'] is not None:
+            encoder_out['encoder_padding_mask'] = \
+                encoder_out['encoder_padding_mask'].index_select(0, new_order)
+        return encoder_out
+
+    def max_positions(self):
+        """Maximum input length supported by the encoder."""
+        if self.embed_positions is None:
+            return self.max_source_positions
+        return min(self.max_source_positions, self.embed_positions.max_positions())
+
+    def upgrade_state_dict_named(self, state_dict, name):
+        """Upgrade a (possibly old) state dict for new versions of fairseq."""
+        if isinstance(self.embed_positions, SinusoidalPositionalEmbedding):
+            weights_key = '{}.embed_positions.weights'.format(name)
+            if weights_key in state_dict:
+                del state_dict[weights_key]
+            state_dict['{}.embed_positions._float_tensor'.format(name)] = torch.FloatTensor(1)
+        for i in range(len(self.layers)):
+            # update layer norms
+            self.layers[i].upgrade_state_dict_named(state_dict, "{}.layers.{}".format(name, i))
+
+        version_key = '{}.version'.format(name)
+        if utils.item(state_dict.get(version_key, torch.Tensor([1]))[0]) < 2:
+            # earlier checkpoints did not normalize after the stack of layers
+            self.layer_norm = None
+            self.normalize = False
+            state_dict[version_key] = torch.Tensor([1])
+        return state_dict
+
+class TransformerEncoder(FairseqEncoder):
+    """
+    Transformer encoder consisting of *args.encoder_layers* layers. Each layer
+    is a :class:`TransformerEncoderLayer`.
+
+    Args:
+        args (argparse.Namespace): parsed command-line arguments
+        dictionary (~fairseq.data.Dictionary): encoding dictionary
+        embed_tokens (torch.nn.Embedding): input embedding
+    """
+
+    def __init__(self, args, dictionary, embed_tokens):
+        super().__init__(dictionary)
+        self.register_buffer('version', torch.Tensor([3]))
+
+        self.dropout = args.dropout
+
+        embed_dim = embed_tokens.embedding_dim
+        self.padding_idx = embed_tokens.padding_idx
+        self.max_source_positions = args.max_source_positions
+
+        self.embed_tokens = embed_tokens
+        self.embed_scale = math.sqrt(embed_dim)
+        self.embed_positions = PositionalEmbedding(
+            args.max_source_positions, embed_dim, self.padding_idx,
+            learned=args.encoder_learned_pos,
+        ) if not args.no_token_positional_embeddings else None
+
+        self.layers = nn.ModuleList([])
+        self.layers.extend([
+            TransformerEncoderLayer(args)
+            for i in range(args.encoder_layers)
+        ])
+
+        if args.encoder_normalize_before:
+            self.layer_norm = LayerNorm(embed_dim)
+        else:
+            self.layer_norm = None
+
+    def forward(self, src_tokens, src_lengths, sent_id):
+        """
+        Args:
+            src_tokens (LongTensor): tokens in the source language of shape
+                `(batch, src_len)`
+            src_lengths (torch.LongTensor): lengths of each source sentence of
+                shape `(batch)`
+
+        Returns:
+            dict:
+                - **encoder_out** (Tensor): the last encoder layer's output of
+                  shape `(src_len, batch, embed_dim)`
+                - **encoder_padding_mask** (ByteTensor): the positions of
+                  padding elements of shape `(batch, src_len)`
+        """
+        # embed tokens and positions
+        x = self.embed_scale * self.embed_tokens(src_tokens)
+        if self.embed_positions is not None:
+            x += self.embed_positions(src_tokens)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+
+        # B x T x C -> T x B x C
+        x = x.transpose(0, 1)
+
+        # compute padding mask
+        encoder_padding_mask = src_tokens.eq(self.padding_idx)
+        if not encoder_padding_mask.any():
+            encoder_padding_mask = None
+
+        # encoder layers
+        for layer in self.layers:
+            x = layer(x, encoder_padding_mask)
+
+        if self.layer_norm:
+            x = self.layer_norm(x)
         # print(x.size())
         # print(encoder_padding_mask.size())
         return {
